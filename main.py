@@ -199,10 +199,12 @@ class FutoshikiSolverBase:
         plt.legend(loc="lower right")
 
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        status_text = ax_plot.text(0.65, 0.5, "", transform=ax_plot.transAxes, fontsize=10,
+        status_text = ax_plot.text(0.62, 0.5, "", transform=ax_plot.transAxes, fontsize=10,
                                        verticalalignment='top', bbox=props)
 
         def update(frame):
+            if frame % 100 == 0:
+                return
             generations_count = min(len(self._plot_best_scores), len(self._plot_avg_scores), len(self._plot_mutation_chances))
             plt.title(f"Generation {self._generation_count}")
 
@@ -210,7 +212,8 @@ class FutoshikiSolverBase:
             avg_line.set_data(np.arange(generations_count), np.array(self._plot_avg_scores[:generations_count]))
             mutation_line.set_data(np.arange(generations_count), np.array(self._plot_mutation_chances[:generations_count]))
 
-            status_text.set_text(f"Best Score: {self._plot_best_scores[-1]}\n"
+            status_text.set_text(f"Best Score: {self._plot_best_scores[-1]:.2f}\n"
+                                 f"Best Score (Overall): {max(self._plot_best_scores):.2f}\n"
                                  f"Average Score: {self._plot_avg_scores[-1]:.2f}\n"
                                  f"Mutation Chance: {self._plot_mutation_chances[-1]*100}%")
 
@@ -420,7 +423,7 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
         return new_solutions
 
     def should_stop(self):
-        return any(filter(self.is_valid_solution, self._solutions))
+        return any(filter(self.is_valid_solution, self._solutions)) or self._generation_count >= 30000
 
     def __init__(self, puzzle_name, matrix_size, predefined_digits: List[FilledCell],
                  greater_than_signs: List[Tuple[Position, Position]], initial_solution_count, solver_type: SolverType):
