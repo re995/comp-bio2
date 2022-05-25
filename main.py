@@ -140,6 +140,8 @@ class FutoshikiSolverBase:
 
         last_best_score_change = 0
         orig_mutation_chance = mutation_chance
+        overall_best_solution = []
+        overall_best_score = -1
 
         while not self.should_stop():
             self._solutions = self._step_generation(replication_ratio, mutation_chance,
@@ -152,9 +154,13 @@ class FutoshikiSolverBase:
             worse_score = min(scores)
             avg_score = np.average(scores)
             best_solution = self._solutions[best_score_index]
+            if best_score > overall_best_score:
+                overall_best_score = best_score
+                overall_best_solution = best_solution
+
             if self._generation_count % 200 == 0:
                 print("Currently best solution:")
-                self.print_solution(best_solution)
+                self.print_solution(overall_best_solution)
                 print("============================================================")
 
             self._plot_best_scores.append(best_score)
