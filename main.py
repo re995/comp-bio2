@@ -235,7 +235,8 @@ class FutoshikiSolverBase:
         plt.show()
 
 class FutoshikiSolverDecimal(FutoshikiSolverBase):
-    def count_digits_occurrences(self, solution: List[List[int]]):
+    @lru_cache(maxsize=256*1024)
+    def count_digits_occurrences(self, solution: Tuple[Tuple[int]]):
         row_counts_mat = []
         col_counts_mat = []
 
@@ -251,7 +252,7 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
 
         return row_counts_mat, col_counts_mat
 
-    def calc_permutation_score(self, solution: List[List[int]]):
+    def calc_permutation_score(self, solution: Tuple[Tuple[int]]):
         """
         Calculates the permutations score.
         For every row/column, if a digit is present only once, the score is raised by PERMUTATION_SCORE_FACTOR
@@ -267,7 +268,7 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
                     success += 1
         return success / (self._matrix_size ** 2 * 2)
 
-    def calc_greater_than_score(self, solution: List[List[int]]):
+    def calc_greater_than_score(self, solution: Tuple[Tuple[int]]):
         """
         Calculates the greater than signs score.
         For every greater than sign, if the digits don't contradict it, the score is raised by GREATER_THAN_SCORE_FACTOR
@@ -358,7 +359,8 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
     def _optimize_solutions(self, solutions):
         solutions = deepcopy(solutions)
         for solution in solutions:
-            row_counts_mat, col_counts_mat = self.count_digits_occurrences(solution)
+            solution_tuple = tuple(map(tuple, solution))
+            row_counts_mat, col_counts_mat = self.count_digits_occurrences(solution_tuple)
             for column_index, column in enumerate(col_counts_mat):
                 missing_value = -1
                 overflow_value = -1
