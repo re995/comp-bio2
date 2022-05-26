@@ -247,7 +247,6 @@ class FutoshikiSolverBase:
             self.print_solution(max(self._solutions, key=lambda solution: self.calc_fitness(solution)))
 
         return solved
-        #plt.savefig(f"{self._puzzle_name}_{self._solver_type.name}_{self._generation_count}gens.jpg")
 
     def run_simulation(self, algo_iterations_per_render, replication_ratio, mutation_chance, elitism_ratio):
         """
@@ -282,6 +281,7 @@ class FutoshikiSolverBase:
             done = self._run_algorithm(algo_iterations_per_render, replication_ratio, mutation_chance, elitism_ratio)
             if done:
                 ani.pause()
+                plt.savefig(f"{self._puzzle_name}_{self._solver_type.name}_{self._generation_count}gens.jpg")
 
             best_line.set_data(np.arange(generations_count), np.array(self._plot_best_scores[:generations_count]))
             avg_line.set_data(np.arange(generations_count), np.array(self._plot_avg_scores[:generations_count]))
@@ -309,42 +309,34 @@ class FutoshikiSolverImpl(FutoshikiSolverBase):
     @lru_cache(maxsize=256*1024)
     def count_digits_occurrences(self, solution: Tuple[Tuple[int]]):
         """
-        Counts digits occurrences in the given solution rows/columns
-        A perfect permutation board (where all rows and all columns are permutations) will result in all-1s matrices
-        TODO: try to remove row counting
+        Counts digits occurrences in the given solution columns
+        A perfect permutation columns (where all columns are permutations) will result in all-1s matrice
         """
-        row_counts_mat = []
         col_counts_mat = []
 
         for i in range(self._matrix_size):
-            row_counts = [0] * self._matrix_size
             col_counts = [0] * self._matrix_size
             for j in range(self._matrix_size):
-                row_counts[solution[i][j] - 1] += 1
                 col_counts[solution[j][i] - 1] += 1
 
-            row_counts_mat.append(row_counts)
             col_counts_mat.append(col_counts)
 
-        return row_counts_mat, col_counts_mat
+        return col_counts_mat
 
     def calc_permutation_score(self, solution: Tuple[Tuple[int]]):
         """
         Calculates the permutations score.
-        For every row/column, if a digit is present only once, the score is raised 1
-        Therefore, for correct board (permutation-wise), the maximum score is row_count * col_count * 2
+        For every column, if a digit is present only once, the score is raised 1
+        Therefore, for correct board (permutation-wise), the maximum score is row_count * col_count
         Eventually we normalize the score, so it'll have the same weight as other score factors.
-        TODO: remove row count
         """
         success = 0
-        row_counts_mat, col_counts_mat = self.count_digits_occurrences(solution)
+        col_counts_mat = self.count_digits_occurrences(solution)
         for i in range(self._matrix_size):
             for index in range(self._matrix_size):
-                if row_counts_mat[i][index] == 1:
-                    success += 1
                 if col_counts_mat[i][index] == 1:
                     success += 1
-        return success / (self._matrix_size ** 2 * 2)
+        return success / (self._matrix_size ** 2)
 
     def calc_greater_than_score(self, solution: Tuple[Tuple[int]]):
         """
@@ -468,7 +460,7 @@ class FutoshikiSolverImpl(FutoshikiSolverBase):
         solutions = deepcopy(solutions)
         for solution in solutions:
             solution_tuple = tuple(map(tuple, solution))
-            row_counts_mat, col_counts_mat = self.count_digits_occurrences(solution_tuple)
+            col_counts_mat = self.count_digits_occurrences(solution_tuple)
             for column_index, column in enumerate(col_counts_mat):
                 missing_value = -1
                 overflow_value = -1
@@ -589,7 +581,7 @@ def main():
         greater_than_signs.append((Position(i1 - 1, j1 - 1), Position(i2 - 1, j2 - 1)))
 
     solver = FutoshikiSolverImpl(input_board_txt.split('.')[0], matrix_size, predefined_digits, greater_than_signs, 100, solver_type, max_generations_count)
-    algo_iterations_per_render = 10 if solver_type == SolverType.REGULAR else 5
+    algo_iterations_per_render = 10 if solver_type == SolverType.REGULAR else 10
     solver.run_simulation(algo_iterations_per_render, replication_ratio=0.1, mutation_chance=0.05, elitism_ratio=0.05)
 
 
