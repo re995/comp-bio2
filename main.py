@@ -179,7 +179,7 @@ class FutoshikiSolverBase:
         """
         pass
 
-    def _run_algorithm(self, replication_ratio, mutation_chance, elitism_ratio):
+    def _run_algorithm(self, steps_count, replication_ratio, mutation_chance, elitism_ratio):
         """
         Runs the whole genetic algorithm with the given parameters.
         This runs _step_generation function repeatedly until should_stop returns True.
@@ -187,14 +187,18 @@ class FutoshikiSolverBase:
         If the best solution fitness value didn't change for 400 generations after that, it drops the current solutions and starts over
         These conditions handle the case of early convergence, when an improvement in solutions isn't found
         """
-        print(f"Starting! Score for correct solution is: {self.max_fitness}")
-
         last_best_score_change = 0
         orig_mutation_chance = mutation_chance
         overall_best_solution = []
         overall_best_score = -1
 
-        while not self.should_stop():
+        solved = False
+
+        for _ in range(steps_count):
+            if self.should_stop():
+                solved = True
+                break
+
             self._solutions = self._step_generation(replication_ratio, mutation_chance,
                                                     elitism_ratio)
             self._generation_count += 1
@@ -230,17 +234,18 @@ class FutoshikiSolverBase:
             else:
                 mutation_chance = orig_mutation_chance
 
-        print(f"Done! Best solution was:")
-        self.print_solution(max(self._solutions, key=lambda solution: self.calc_fitness(solution)))
+        if solved:
+            print(f"Done! Best solution was:")
+            self.print_solution(max(self._solutions, key=lambda solution: self.calc_fitness(solution)))
+
+        return solved
         #plt.savefig(f"{self._puzzle_name}_{self._solver_type.name}_{self._generation_count}gens.jpg")
 
-    def run_simulation(self, replication_ratio, mutation_chance, elitism_ratio):
+    def run_simulation(self, algo_iterations_per_render, replication_ratio, mutation_chance, elitism_ratio):
         """
         Runs the whole simulation, including live plotting.
         The genetic algorithm runs asynchronously so it won't be slowed down by plotting
         """
-        algo_thread = Thread(target=self._run_algorithm, args=(replication_ratio, mutation_chance, elitism_ratio))
-        algo_thread.start()
 
         # Init chart view
         fig, ax_plot = plt.subplots()
@@ -265,6 +270,10 @@ class FutoshikiSolverBase:
         def update(frame):
             generations_count = min(len(self._plot_best_scores), len(self._plot_avg_scores), len(self._plot_mutation_chances))
             plt.title(f"Generation {self._generation_count}")
+
+            done = self._run_algorithm(algo_iterations_per_render, replication_ratio, mutation_chance, elitism_ratio)
+            if done:
+                ani.pause()
 
             best_line.set_data(np.arange(generations_count), np.array(self._plot_best_scores[:generations_count]))
             avg_line.set_data(np.arange(generations_count), np.array(self._plot_avg_scores[:generations_count]))
@@ -572,7 +581,8 @@ def main():
         greater_than_signs.append((Position(i1 - 1, j1 - 1), Position(i2 - 1, j2 - 1)))
 
     solver = FutoshikiSolverImpl(input_board_txt.split('.')[0], matrix_size, predefined_digits, greater_than_signs, 100, solver_type, max_generations_count)
-    solver.run_simulation(replication_ratio=0.1, mutation_chance=0.05, elitism_ratio=0.05)
+    algo_iterations_per_render = 10 if solver_type == SolverType.REGULAR else 5
+    solver.run_simulation(algo_iterations_per_render, replication_ratio=0.1, mutation_chance=0.05, elitism_ratio=0.05)
 
 
 if __name__ == '__main__':

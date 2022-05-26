@@ -2,11 +2,11 @@
 
 ### For quick running, you can use the following template:
 
-```ex2.exe BOARD.txt 1 30000``` (for regular mode)
+```ex2.exe BOARD.txt 1 10000``` (for regular mode)
 
-```ex2.exe BOARD.txt 2 30000``` (for Darwin mode)
+```ex2.exe BOARD.txt 2 10000``` (for Darwin mode)
 
-```ex2.exe BOARD.txt 3 30000``` (for Lamark mode)
+```ex2.exe BOARD.txt 3 10000``` (for Lamark mode)
 
 Or you can run ```ex2.exe``` without arguments, to be asked for parameters interactively
 
