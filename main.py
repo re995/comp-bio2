@@ -1,3 +1,21 @@
+# Computational Biology Exercise 2
+# Genetic Algorithms - Futoshiki
+# Yair Yariv Yardeni - 315009969
+# Ron Even           - 313260317
+
+# Dynamically download required modules
+import subprocess
+import sys
+import pkg_resources
+
+required = {"numpy", "matplotlib", "attrs"}
+installed = {pkg.key for pkg in pkg_resources.working_set}
+missing = required - installed
+if missing:
+    print("Installing missing libraries... Please wait")
+    python_path = sys.executable
+    subprocess.check_call([python_path, "-m", "pip", "install", *missing])
+
 import itertools
 import math
 import pprint
@@ -19,6 +37,9 @@ from matplotlib.ticker import AutoLocator
 
 @attr.s
 class Position:
+    """
+    Helper class for representing a row/column position
+    """
     row = attr.ib(type=int)
     column = attr.ib(type=int)
 
@@ -31,11 +52,17 @@ class Position:
 
 @attr.s
 class FilledCell:
+    """
+    Helper class for representing a pre-defined cell value and position
+    """
     value = attr.ib(type=int)
     position = attr.ib(type=Position)
 
 
 class SolverType(Enum):
+    """
+    Enum for representing type of generic algorithm generation selection
+    """
     REGULAR = 1
     DARWIN = 2
     LAMARK = 3
@@ -44,7 +71,7 @@ class SolverType(Enum):
 class FutoshikiSolverBase:
     def __init__(self, puzzle_name, matrix_size, predefined_digits: List[FilledCell],
                  greater_than_signs: List[Tuple[Position, Position]],
-                 initial_solution_count, solver_type: SolverType):
+                 initial_solution_count, solver_type: SolverType, max_generations_count):
         self._puzzle_name = puzzle_name
         self._matrix_size = matrix_size
         self._predefined_digits = predefined_digits
@@ -58,8 +85,13 @@ class FutoshikiSolverBase:
         self._plot_best_scores = []
         self._plot_avg_scores = []
         self._plot_mutation_chances = []
+        self._max_generations_count = max_generations_count
 
     def _generate_random_solution(self) -> List[List[int]]:
+        """
+        Generates a single random solution
+        The generated solution isn't necessarily valid, but will make sure every row is valid permutation
+        """
         solution = []
         for i in range(self._matrix_size):
             permutation = list(range(1, self._matrix_size + 1))
@@ -69,41 +101,50 @@ class FutoshikiSolverBase:
         return solution
 
     @abstractmethod
+    @lru_cache
     def _calc_fitness(self, solution: Tuple[Tuple[int]]) -> float:
+        """
+        Abstract fitness calculation function. The more the result is high, the better the solution is
+        """
         pass
 
     def calc_fitness(self, solution: List[List[int]]) -> float:
+        """
+        Fitness calculation function wrapper, to allow LRU cache for fitness calculation (for better performance)
+        """
         solution_tuple = tuple(map(tuple, solution))
         return self._calc_fitness(solution_tuple)
 
     @property
     @abstractmethod
     def max_fitness(self):
+        """
+        Abstract max fitness property. This determines the highest fitness possible (of a valid solution)
+        :return:
+        """
         pass
 
-    @staticmethod
-    def split_by_size(lst, size):
-        result = []
-        for i in range(0, len(lst), size):
-            result.append(lst[i:i + size])
-
-        return result
-
     def is_valid_solution(self, solution: List[List[int]]):
+        """
+        Determines whether the given solution is valid
+        """
         return self.calc_fitness(solution) == self.max_fitness
 
     @abstractmethod
-    def _step_generation(self, replication_ratio, mutation_chance, elitism_ratio):
+    def _step_generation(self, replication_ratio, mutation_chance, elitism_ratio) -> List[List[List[int]]]:
+        """
+        Abstract function to implement a single generation step.
+        The implementation should return a list of the solutions for the next generation, produced by replication,crossover,mutation etc.
+        :param replication_ratio: Ratio for how many solutions will be replicated as is. The complementary ratio will be used for crossover
+        :param mutation_chance: Chance for applying a mutation on solutions
+        :param elitism_ratio: Ratio for how many times the best solution will be replicated from the previous to next generation
+        """
         pass
 
-    # def crossover(self, encoded_solution1, encoded_solution2, crossover_index):
-    #     return encoded_solution1[:crossover_index] + encoded_solution2[crossover_index:]
-    #
-    # def mutate(self, encoded_solution, mutation_index):
-    #     mutated_bit = str(int(not bool(int((encoded_solution[mutation_index])))))
-    #     return encoded_solution[:mutation_index] + mutated_bit + encoded_solution[mutation_index + 1:]
-
     def print_solution(self, solution: List[List[int]]):
+        """
+        Helper function to print a given solution with its bigger-than signs
+        """
         result_matrix = [[" " for _ in range(self._matrix_size * 2 - 1)] for _ in range(self._matrix_size * 2 - 1)]
 
         for i in range(0, self._matrix_size * 2, 2):
@@ -133,9 +174,19 @@ class FutoshikiSolverBase:
 
     @abstractmethod
     def should_stop(self):
+        """
+        Abstract function to determine whether the genetic algorithm can stop
+        """
         pass
 
     def _run_algorithm(self, replication_ratio, mutation_chance, elitism_ratio):
+        """
+        Runs the whole genetic algorithm with the given parameters.
+        This runs _step_generation function repeatedly until should_stop returns True.
+        If the best solution fitness value didn't change for 200 generations, it forces mutation on every solution for the next generation
+        If the best solution fitness value didn't change for 400 generations after that, it drops the current solutions and starts over
+        These conditions handle the case of early convergence, when an improvement in solutions isn't found
+        """
         print(f"Starting! Score for correct solution is: {self.max_fitness}")
 
         last_best_score_change = 0
@@ -151,7 +202,6 @@ class FutoshikiSolverBase:
             scores = [self.calc_fitness(s) for s in self._solutions]
             best_score_index = np.argmax(scores)
             best_score = scores[best_score_index]
-            worse_score = min(scores)
             avg_score = np.average(scores)
             best_solution = self._solutions[best_score_index]
             if best_score > overall_best_score:
@@ -182,9 +232,13 @@ class FutoshikiSolverBase:
 
         print(f"Done! Best solution was:")
         self.print_solution(max(self._solutions, key=lambda solution: self.calc_fitness(solution)))
-        plt.savefig(f"{self._puzzle_name}_{self._solver_type.name}_{self._generation_count}gens.jpg")
+        #plt.savefig(f"{self._puzzle_name}_{self._solver_type.name}_{self._generation_count}gens.jpg")
 
     def run_simulation(self, replication_ratio, mutation_chance, elitism_ratio):
+        """
+        Runs the whole simulation, including live plotting.
+        The genetic algorithm runs asynchronously so it won't be slowed down by plotting
+        """
         algo_thread = Thread(target=self._run_algorithm, args=(replication_ratio, mutation_chance, elitism_ratio))
         algo_thread.start()
 
@@ -209,8 +263,6 @@ class FutoshikiSolverBase:
                                        verticalalignment='top', bbox=props)
 
         def update(frame):
-            if frame % 100 == 0:
-                return
             generations_count = min(len(self._plot_best_scores), len(self._plot_avg_scores), len(self._plot_mutation_chances))
             plt.title(f"Generation {self._generation_count}")
 
@@ -234,9 +286,15 @@ class FutoshikiSolverBase:
         ani = animation.FuncAnimation(fig, update, interval=1)
         plt.show()
 
-class FutoshikiSolverDecimal(FutoshikiSolverBase):
+
+class FutoshikiSolverImpl(FutoshikiSolverBase):
+
     @lru_cache(maxsize=256*1024)
     def count_digits_occurrences(self, solution: Tuple[Tuple[int]]):
+        """
+        Counts digits occurrences in the given solution rows/columns
+        A perfect permutation board (where both all rows and all columns are permutations) will result in all-1s matrices
+        """
         row_counts_mat = []
         col_counts_mat = []
 
@@ -255,8 +313,9 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
     def calc_permutation_score(self, solution: Tuple[Tuple[int]]):
         """
         Calculates the permutations score.
-        For every row/column, if a digit is present only once, the score is raised by PERMUTATION_SCORE_FACTOR
-        Therefore, for correct board (permutation-wise), the maximum score is row_count * col_count * PERMUTATION_SCORE_FACTOR
+        For every row/column, if a digit is present only once, the score is raised 1
+        Therefore, for correct board (permutation-wise), the maximum score is row_count * col_count * 2
+        Eventually we normalize the score, so it'll have the same weight as other score factors.
         """
         success = 0
         row_counts_mat, col_counts_mat = self.count_digits_occurrences(solution)
@@ -271,8 +330,9 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
     def calc_greater_than_score(self, solution: Tuple[Tuple[int]]):
         """
         Calculates the greater than signs score.
-        For every greater than sign, if the digits don't contradict it, the score is raised by GREATER_THAN_SCORE_FACTOR
-        Therefore, for correct board (greater-than-wise), the maximum score is len(greater_than_signs)*GREATER_THAN_SCORE_FACTOR
+        For every greater than sign, if the digits don't contradict it, the score is raised by 1
+        Therefore, for correct board (greater-than-wise), the maximum score is len(greater_than_signs)
+        Eventually we normalize the score, so it'll have the same weight as other score factors.
         """
         success = 0
         for greater_than_sign in self._greater_than_signs:
@@ -284,6 +344,12 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
 
     @lru_cache(maxsize=2048)
     def _calc_fitness(self, solution) -> float:
+        """
+        Calculates the fitness, summing permutation score and greater-than signs score
+        Note: Pre-defined digits are always correct, because we handle it in _step_generation
+        :param solution:
+        :return:
+        """
         fitness = 0
         fitness += self.calc_permutation_score(solution)
         fitness += self.calc_greater_than_score(solution)
@@ -294,12 +360,17 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
     def max_fitness(self):
         """
         The maximum score a solution can get (meaning it is the correct one)
-        See score functions for more info
+        This is increased by 1 for each score factor, so it's total of 2
         """
-
         return 2
 
-    def _crossover(self, solutions, probabilities, count):
+    def _get_crossovers(self, solutions, probabilities, count):
+        """
+        Returns a solution population by crossovers of given solutions, using biased selection
+        Crossovers are made row-wise, by randomizing a row index, i, and constructing the result by taking the first i rows from the first solution,
+        and concatenating them to the last _matrix_size - i rows in the second solution.
+        This way row permutations are maintained, and there's a chance column permutations can be improved
+        """
         ret = []
         for i in range(count):
             sol1_index = np.random.choice(range(len(solutions)), p=probabilities)
@@ -314,7 +385,10 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
 
         return ret
 
-    def _replication(self, solutions, probabilities, count):
+    def _get_replications(self, solutions, probabilities, count):
+        """
+        Returns a solution population by replications of given solutions, using biased selection
+        """
         ret = []
         for i in range(count):
             sol_index = np.random.choice(range(len(solutions)), p=probabilities)
@@ -323,6 +397,15 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
         return ret
 
     def _mutate_solutions(self, solutions, mutation_chance):
+        """
+        Mutates the given solutions (in-place)
+        Every solution will be mutated with probability of mutation_chance.
+        Solution mutation is made selecting 1 to 5 rows (randomly),
+        for each row, exchanging 2 values in it.
+        This way, row permutations are maintained, while giving a chance for columns permutations to be fixed.
+        However, greater-than signs and predefined digits can be harmed. Solution with harmed signs will naturally get lower score,
+        and predefined digits will be fixed anyway in the end of _step_generation
+        """
         for i in range(len(solutions)):
             if random.random() > mutation_chance:
                 continue
@@ -337,17 +420,18 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
 
                 mutated1 = Position(orientation_index, index1)
                 mutated2 = Position(orientation_index, index2)
-                if np.random.choice([True, False], p=(0, 1)):
-                    mutated1 = mutated1.reverse()
-                    mutated2 = mutated2.reverse()
-
                 solution = deepcopy(solutions[i])
 
                 solution[mutated1.row][mutated1.column], solution[mutated2.row][mutated2.column] = \
                 solution[mutated2.row][mutated2.column], solution[mutated1.row][mutated1.column]
                 solutions[i] = solution
 
-    def fix_value_in_row_permutation(self, row, value, dst_index):
+    def _fix_value_in_row_permutation(self, row, value, dst_index):
+        """
+        Helper function for _optimize_solutions.
+        Makes one fix step of a column permutation, by exchanging two values in the needed row.
+        This makes sure row permutation is maintained, while making a fix step for column permutation
+        """
         src_index = -1
         for index, current_value in enumerate(row):
             if current_value == value:
@@ -355,8 +439,15 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
                 break
         row[src_index], row[dst_index] = row[dst_index], row[src_index]
 
-
     def _optimize_solutions(self, solutions):
+        """
+        Makes one optimization step of every one of the given solution. Used in Darwin/Lamark mode.
+        The optimization looks for an invalid column permutation (if there is one).
+        Then, it counts the occurrences of digits in the solution rows/columns.
+        When a column is not a permutation, it must mean there is at least one digit with 0 occurrences, and at least one digit with at least 2 occurences.
+        Therefore, it replaces one of the digits with (at least) 2 occurrences with the digit with 0 occurrences.
+        To not harm row permutations, it uses _fix_value_in_row_permutation helper function in order to do that.
+        """
         solutions = deepcopy(solutions)
         for solution in solutions:
             solution_tuple = tuple(map(tuple, solution))
@@ -378,13 +469,18 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
 
                 for row in range(self._matrix_size):
                     if solution[row][column_index] == overflow_value:
-                        self.fix_value_in_row_permutation(solution[row], missing_value, column_index)
+                        self._fix_value_in_row_permutation(solution[row], missing_value, column_index)
                         break
 
         return solutions
 
     def _step_generation(self, replication_ratio, mutation_chance, elitism_ratio):
-
+        """
+        Makes a single generation step, calling replication, crossover, mutation, etc. functions
+        After creating the population for the new generation, it fixes all predefined digits violations.
+        It does that to decrease the solution search space, and doesn't harm row permutations.
+        This is because it exchanges digits in the same row for the fix, maintaining row permutations
+        """
         # Don't optimize the best solution, so elitism will be maintained
         scores = [self.calc_fitness(s) for s in self._solutions]
         best_score_index = np.argmax(scores)
@@ -409,10 +505,10 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
         elitism_count = math.ceil(len(self._solutions) * elitism_ratio)
         crossover_count = len(self._solutions) - replication_count - elitism_count
 
-        new_solutions += self._replication(self._solutions, probabilities, replication_count)
+        new_solutions += self._get_replications(self._solutions, probabilities, replication_count)
 
         # Crossover
-        new_solutions += self._crossover(self._solutions, probabilities, crossover_count)
+        new_solutions += self._get_crossovers(self._solutions, probabilities, crossover_count)
 
         # Mutation
         self._mutate_solutions(new_solutions, mutation_chance)
@@ -431,20 +527,26 @@ class FutoshikiSolverDecimal(FutoshikiSolverBase):
         return new_solutions
 
     def should_stop(self):
-        return any(filter(self.is_valid_solution, self._solutions)) or self._generation_count >= 30000
-
-    def __init__(self, puzzle_name, matrix_size, predefined_digits: List[FilledCell],
-                 greater_than_signs: List[Tuple[Position, Position]], initial_solution_count, solver_type: SolverType):
-        super().__init__(puzzle_name, matrix_size, predefined_digits, greater_than_signs, initial_solution_count, solver_type)
+        """
+        Determines whether the genetic algorithm should stop.
+        It stops if a valid solution is found, or the generation count threshold was reached
+        """
+        return any(filter(self.is_valid_solution, self._solutions)) or self._generation_count >= self._max_generations_count
 
 
 def main():
+    """
+    Input is: <PATH_TO_BOARD_FILE> <SOLVER_TYPE> <MAX_GENERATIONS_COUNT>
+    """
     input_board_txt = sys.argv[1] if len(sys.argv) >= 2 else input("Please enter input board path: ")
     with open(input_board_txt) as f:
         lines = f.readlines()
 
-    solver_type = sys.argv[2] if len(sys.argv) == 3 else input("Please enter solver type id:\n1: Regular\n2: Darwin\n3: Lamark\n")
+    solver_type = sys.argv[2] if len(sys.argv) >= 3 else input("Please enter solver type id:\n1: Regular\n2: Darwin\n3: Lamark\n")
     solver_type = SolverType(int(solver_type))
+
+    max_generations_count = sys.argv[3] if len(sys.argv) >= 4 else input("Please enter max generations count: ")
+    max_generations_count = int(max_generations_count)
 
     i = 0
     matrix_size = int(lines[i])
@@ -469,7 +571,7 @@ def main():
         i1, j1, i2, j2 = map(int, greater_than_desc.split())
         greater_than_signs.append((Position(i1 - 1, j1 - 1), Position(i2 - 1, j2 - 1)))
 
-    solver = FutoshikiSolverDecimal(input_board_txt.split('.')[0], matrix_size, predefined_digits, greater_than_signs, 100, solver_type)
+    solver = FutoshikiSolverImpl(input_board_txt.split('.')[0], matrix_size, predefined_digits, greater_than_signs, 100, solver_type, max_generations_count)
     solver.run_simulation(replication_ratio=0.1, mutation_chance=0.05, elitism_ratio=0.05)
 
 

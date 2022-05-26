@@ -1,4 +1,3 @@
 attrs
-methodtools
 matplotlib
 numpy
