@@ -38,7 +38,7 @@ from matplotlib.ticker import AutoLocator
 @attr.s
 class Position:
     """
-    Helper class for representing a row/column position
+    Helper class for representing a row/column position in a solution
     """
     row = attr.ib(type=int)
     column = attr.ib(type=int)
@@ -53,7 +53,7 @@ class Position:
 @attr.s
 class FilledCell:
     """
-    Helper class for representing a pre-defined cell value and position
+    Helper class for representing a pre-defined cell value and its position
     """
     value = attr.ib(type=int)
     position = attr.ib(type=Position)
@@ -61,7 +61,7 @@ class FilledCell:
 
 class SolverType(Enum):
     """
-    Enum for representing type of generic algorithm generation selection
+    Enum for representing type of genetic algorithm generation selection
     """
     REGULAR = 1
     DARWIN = 2
@@ -69,9 +69,18 @@ class SolverType(Enum):
 
 
 class FutoshikiSolverBase:
+    """
+    Base class for genetics algorithm which provide basic utils for genetic algorithms which attempts to solve the Futoshiki game
+    """
     def __init__(self, puzzle_name, matrix_size, predefined_digits: List[FilledCell],
                  greater_than_signs: List[Tuple[Position, Position]],
                  initial_solution_count, solver_type: SolverType, max_generations_count):
+        """
+        :param puzzle_name: used for display purpose
+        :param predefined_digits: positions and values of predefines
+        :param greater_than_signs: positions of greater than signs.
+        :param max_generations_count: Defines in how many generations the algorithm should stop if solution wasn't found
+        """
         self._puzzle_name = puzzle_name
         self._matrix_size = matrix_size
         self._predefined_digits = predefined_digits
@@ -104,7 +113,7 @@ class FutoshikiSolverBase:
     @lru_cache
     def _calc_fitness(self, solution: Tuple[Tuple[int]]) -> float:
         """
-        Abstract fitness calculation function. The more the result is high, the better the solution is
+        Abstract fitness calculation function. The higher the result - the better the solution is
         """
         pass
 
@@ -119,8 +128,7 @@ class FutoshikiSolverBase:
     @abstractmethod
     def max_fitness(self):
         """
-        Abstract max fitness property. This determines the highest fitness possible (of a valid solution)
-        :return:
+        Abstract max fitness property. This determines the highest possible fitness (of a valid solution)
         """
         pass
 
@@ -134,10 +142,10 @@ class FutoshikiSolverBase:
     def _step_generation(self, replication_ratio, mutation_chance, elitism_ratio) -> List[List[List[int]]]:
         """
         Abstract function to implement a single generation step.
-        The implementation should return a list of the solutions for the next generation, produced by replication,crossover,mutation etc.
+        The implementation should return a list of the solutions for the next generation, produced by replication,crossover, mutation etc.
         :param replication_ratio: Ratio for how many solutions will be replicated as is. The complementary ratio will be used for crossover
-        :param mutation_chance: Chance for applying a mutation on solutions
-        :param elitism_ratio: Ratio for how many times the best solution will be replicated from the previous to next generation
+        :param mutation_chance: Chance for applying a mutation on every solution
+        :param elitism_ratio: Ratio for how many times the best solution will be replicated from the previous to the next generation
         """
         pass
 
@@ -181,9 +189,9 @@ class FutoshikiSolverBase:
 
     def _run_algorithm(self, steps_count, replication_ratio, mutation_chance, elitism_ratio):
         """
-        Runs the whole genetic algorithm with the given parameters.
-        This runs _step_generation function repeatedly until should_stop returns True.
-        If the best solution fitness value didn't change for 200 generations, it forces mutation on every solution for the next generation
+        Runs steps_count generations of the genetic algorithm with the given parameters.
+        This runs _step_generation function repeatedly until should_stop returns True or steps_count generations have passed.
+        If the best solution fitness value didn't change for 200 generations, it forces mutation on every solution for a single generation
         If the best solution fitness value didn't change for 400 generations after that, it drops the current solutions and starts over
         These conditions handle the case of early convergence, when an improvement in solutions isn't found
         """
@@ -244,7 +252,7 @@ class FutoshikiSolverBase:
     def run_simulation(self, algo_iterations_per_render, replication_ratio, mutation_chance, elitism_ratio):
         """
         Runs the whole simulation, including live plotting.
-        The genetic algorithm runs asynchronously so it won't be slowed down by plotting
+        Every time the plot is rendered, the genetic algorithm runs algo_iterations_per_render generations, so it won't be slowed down by plotting bottleneck
         """
 
         # Init chart view
@@ -302,7 +310,8 @@ class FutoshikiSolverImpl(FutoshikiSolverBase):
     def count_digits_occurrences(self, solution: Tuple[Tuple[int]]):
         """
         Counts digits occurrences in the given solution rows/columns
-        A perfect permutation board (where both all rows and all columns are permutations) will result in all-1s matrices
+        A perfect permutation board (where all rows and all columns are permutations) will result in all-1s matrices
+        TODO: try to remove row counting
         """
         row_counts_mat = []
         col_counts_mat = []
@@ -325,6 +334,7 @@ class FutoshikiSolverImpl(FutoshikiSolverBase):
         For every row/column, if a digit is present only once, the score is raised 1
         Therefore, for correct board (permutation-wise), the maximum score is row_count * col_count * 2
         Eventually we normalize the score, so it'll have the same weight as other score factors.
+        TODO: remove row count
         """
         success = 0
         row_counts_mat, col_counts_mat = self.count_digits_occurrences(solution)
@@ -356,8 +366,6 @@ class FutoshikiSolverImpl(FutoshikiSolverBase):
         """
         Calculates the fitness, summing permutation score and greater-than signs score
         Note: Pre-defined digits are always correct, because we handle it in _step_generation
-        :param solution:
-        :return:
         """
         fitness = 0
         fitness += self.calc_permutation_score(solution)
@@ -376,8 +384,8 @@ class FutoshikiSolverImpl(FutoshikiSolverBase):
     def _get_crossovers(self, solutions, probabilities, count):
         """
         Returns a solution population by crossovers of given solutions, using biased selection
-        Crossovers are made row-wise, by randomizing a row index, i, and constructing the result by taking the first i rows from the first solution,
-        and concatenating them to the last _matrix_size - i rows in the second solution.
+        Crossovers are made row-wise, by randomizing a row index i, and constructing the result by taking the first i rows from the first solution,
+        concatenating them to the last _matrix_size - i rows in the second solution.
         This way row permutations are maintained, and there's a chance column permutations can be improved
         """
         ret = []
@@ -452,7 +460,7 @@ class FutoshikiSolverImpl(FutoshikiSolverBase):
         """
         Makes one optimization step of every one of the given solution. Used in Darwin/Lamark mode.
         The optimization looks for an invalid column permutation (if there is one).
-        Then, it counts the occurrences of digits in the solution rows/columns.
+        Then, it counts the occurrences of digits in the solution columns.
         When a column is not a permutation, it must mean there is at least one digit with 0 occurrences, and at least one digit with at least 2 occurences.
         Therefore, it replaces one of the digits with (at least) 2 occurrences with the digit with 0 occurrences.
         To not harm row permutations, it uses _fix_value_in_row_permutation helper function in order to do that.
